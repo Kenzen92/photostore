@@ -1,4 +1,5 @@
 import * as SQLite from "expo-sqlite";
+import { DatabaseItem, MediaItem } from "@/components/media/media_list";
 
 export const initializeDB = async () => {
   const db = await SQLite.openDatabaseAsync("photostore.db");
@@ -52,8 +53,7 @@ export const getMediaFiles = async () => {
   console.log(db);
   try {
     const dataArray = await db.getAllAsync(`SELECT * FROM media_files`);
-    console.log(dataArray);
-    return dataArray;
+    return dataArray as DatabaseItem[];
   } catch (error) {
     console.error("❌ Error getting media files:", error);
     return [];

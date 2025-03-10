@@ -16,17 +16,27 @@ import {
   updateMediaFile,
   getMediaFileByTitle,
 } from "@/db/db";
+import { IconSymbol } from "../ui/IconSymbol";
 
-interface MediaItem {
+export interface MediaItem {
   id: string;
   filename: string;
   uri: string;
 }
-
+// TODO
+export interface DatabaseItem {
+  id: number; // INTEGER PRIMARY KEY
+  filename: string; // TEXT
+  uri: string; // TEXT
+  is_synced: number; // INTEGER (0 or 1)
+  created_at: string; // DATETIME (represented as a string)
+}
 export default function MediaListScreen() {
-  const [mediaFiles, setMediaFiles] = useState<MediaItem[]>([]);
+  const [mediaFileFromDevice, setmediaFileFromDevice] = useState<MediaItem[]>(
+    []
+  );
   const [permissionResponse, requestPermission] = MediaLibrary.usePermissions();
-  const [mediaData, setMediaData] = useState<any[]>([]);
+  const [mediaDataFromDatabase, setmediaDataFromDatabase] = useState<any[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -34,13 +44,13 @@ export default function MediaListScreen() {
         const { status } = await requestPermission();
         if (status === "granted") {
           console.log("✅ Permission granted");
-          loadMediaFiles(); // Call after permission is granted
+          loadmediaFileFromDevice(); // Call after permission is granted
         } else {
           console.log("❌ Permission still not granted");
         }
       } else {
         console.log("✅ Already have permission");
-        loadMediaFiles(); // Load if already granted
+        loadmediaFileFromDevice(); // Load if already granted
       }
     })();
   }, [permissionResponse]);
@@ -50,12 +60,11 @@ export default function MediaListScreen() {
       await initializeDB(); // Ensure DB is set up
       check_db_for_media_files();
       const dataArray: any[] = await getMediaFiles(); // Fetch data
-      console.log(dataArray);
-      setMediaData(dataArray);
+      setmediaDataFromDatabase(dataArray);
     })();
-  }, []);
+  }, [mediaFileFromDevice]);
 
-  async function loadMediaFiles() {
+  async function loadmediaFileFromDevice() {
     console.log("📂 Loading media files...");
     if (!permissionResponse || permissionResponse.status !== "granted") {
       console.log("❌ Permission not granted");
@@ -88,7 +97,7 @@ export default function MediaListScreen() {
       }
 
       console.log("📸 Media loaded: ", media.length);
-      setMediaFiles(media);
+      setmediaFileFromDevice(media);
     } catch (error) {
       console.error("❌ Error loading media:", error);
     }
@@ -98,8 +107,8 @@ export default function MediaListScreen() {
     console.log("📂 Checking for media files...");
 
     // Iterate over the media files and check if each file exists in the database
-    for (let i = 0; i < mediaFiles.length; i++) {
-      const file = mediaFiles[i];
+    for (let i = 0; i < mediaFileFromDevice.length; i++) {
+      const file = mediaFileFromDevice[i];
       const databaseFile = await getMediaFileByTitle(file.filename);
 
       if (databaseFile === null) {
@@ -107,33 +116,88 @@ export default function MediaListScreen() {
         await insertMediaFile(file.filename, file.uri);
       }
     }
-    // repeat the print of all database content
-    const databaseContent = await getMediaFiles();
-    console.log("📂 Database content:", databaseContent);
   }
+
+  const sync_media_files_to_db = async () => {
+    console.log("📂 Syncing media files to database...");
+
+    const databaseContent: DatabaseItem[] = await getMediaFiles();
+    for (let i = 0; i < databaseContent.length; i++) {
+      const databaseFile: DatabaseItem = databaseContent[i];
+
+      if (databaseFile.is_synced === 0) {
+        // Only sync if is_synced is 0
+        try {
+          const response = await fetch("http://localhost:3000/submit", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              filename: databaseFile.filename,
+              uri: databaseFile.uri,
+            }),
+          });
+
+          console.log("response:", response);
+
+          if (response.ok) {
+            console.log(
+              `✅ File ${databaseFile.filename} synced successfully.`
+            );
+            await updateMediaFile(databaseFile.id, 1); // Mark as synced
+          } else if (response.status === 400) {
+            console.log(
+              `⚠️ File ${databaseFile.filename} already exists on the server.`
+            );
+            await updateMediaFile(databaseFile.id, 1); // Mark as synced
+          } else {
+            console.error(
+              `❌ Error syncing file ${databaseFile.filename}. Status: ${response.status}`
+            );
+          }
+        } catch (error) {
+          console.error(
+            `❌ Network error syncing file ${databaseFile.filename}:`,
+            error
+          );
+        }
+      }
+    }
+  };
 
   return (
     <View style={styles.container}>
-      <Text style={{ color: "black" }}>Yo</Text>
-      <Button title="Reload Media" onPress={loadMediaFiles} />
-      <View>
-        {mediaFiles.length > 0 ? (
-          mediaFiles.map((file) => (
-            <Text key={file.id} style={styles.fileText}>
-              {file.filename}
-            </Text>
-          ))
-        ) : (
-          <Text style={styles.noFilesText}>No media found</Text>
-        )}
-      </View>
+      <Button title="Reload Media" onPress={loadmediaFileFromDevice} />
+      <Button title="Sync Media" onPress={sync_media_files_to_db} />
       <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 20 }}>
         <Text style={{ color: "black", fontSize: 18 }}>SQLite Test Data</Text>
-        {mediaData.length > 0 ? (
-          mediaData.map((item) => (
-            <Text key={item.id} style={styles.fileText}>
-              {item.filename} - {item.uri}
-            </Text>
+        {mediaDataFromDatabase.length > 0 ? (
+          mediaDataFromDatabase.map((item) => (
+            <View
+              key={item.id}
+              style={{
+                display: "flex",
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: 5,
+                margin: 5,
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: "black",
+                backgroundColor: "white",
+              }}
+            >
+              <Text style={styles.fileText}>{item.filename}</Text>
+              {item.is_synced == 0 ? (
+                // Show a synced icon
+                <IconSymbol name="sync" size={20} color="red" />
+              ) : (
+                // Show an unsynced icon
+                <IconSymbol name="sync" size={20} color="green" />
+              )}
+            </View>
           ))
         ) : (
           <Text style={styles.noFilesText}>No data found</Text>
