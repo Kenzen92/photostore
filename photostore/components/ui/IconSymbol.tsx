@@ -6,15 +6,14 @@ import React from "react";
 import { OpaqueColorValue, StyleProp, ViewStyle } from "react-native";
 
 // Add your SFSymbol to MaterialIcons mappings here.
+// prettier-ignore
 const MAPPING = {
-  // See MaterialIcons here: https://icons.expo.fyi
-  // See SF Symbols in the SF Symbols app on Mac.
   "house.fill": "home",
   "paperplane.fill": "send",
   "chevron.left.forwardslash.chevron.right": "code",
   "chevron.right": "chevron-right",
-  settings: "settings",
-  sync: "sync",
+  "settings": "settings",
+  "sync": "sync",
 } as Partial<
   Record<
     import("expo-symbols").SymbolViewProps["name"],

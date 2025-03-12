@@ -37,8 +37,9 @@ func main() {
 		}
 	}
 
-	// Create a new Fiber instance
-	app := fiber.New()
+	app := fiber.New(fiber.Config{
+		BodyLimit: 1 * 1024 * 1024 * 1024, // 1GB in bytes
+	})
 
 	// Basic route
 	app.Get("/", func(c *fiber.Ctx) error {
@@ -51,11 +52,12 @@ func main() {
 		// Get the uploaded file
 		file, err := c.FormFile("photo")
 		if err != nil {
+			log.Println("Error here", err) // Use log.Println
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid file upload",
+				"error": err,
 			})
 		}
-
+		log.Println("Creating file path") // Use log.Println
 		// Generate file path
 		filePath := fmt.Sprintf("%s/%s", uploadDir, file.Filename)
 
@@ -70,9 +72,10 @@ func main() {
 				"path":  existingPhoto.Path,
 			})
 		}
-
+		log.Println("Saving file to disk") // Use log.Println
 		// Save file to disk
 		if err := c.SaveFile(file, filePath); err != nil {
+			log.Println("Error", err) // Use log.Println
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "Failed to save file",
 			})

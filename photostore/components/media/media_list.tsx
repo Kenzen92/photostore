@@ -8,29 +8,30 @@ import {
   StyleSheet,
 } from "react-native";
 import * as MediaLibrary from "expo-media-library";
+import * as FileSystem from "expo-file-system";
 import {
   initializeDB,
-  getTestData,
   getMediaFiles,
   insertMediaFile,
   updateMediaFile,
   getMediaFileByTitle,
 } from "@/db/db";
-import { IconSymbol } from "../ui/IconSymbol";
+import { IconSymbol, IconSymbolName } from "../ui/IconSymbol";
 
 export interface MediaItem {
   id: string;
   filename: string;
   uri: string;
 }
-// TODO
+
 export interface DatabaseItem {
-  id: number; // INTEGER PRIMARY KEY
-  filename: string; // TEXT
-  uri: string; // TEXT
-  is_synced: number; // INTEGER (0 or 1)
-  created_at: string; // DATETIME (represented as a string)
+  id: number;
+  filename: string;
+  uri: string;
+  is_synced: number;
+  created_at: string;
 }
+
 export default function MediaListScreen() {
   const [mediaFileFromDevice, setmediaFileFromDevice] = useState<MediaItem[]>(
     []
@@ -44,22 +45,22 @@ export default function MediaListScreen() {
         const { status } = await requestPermission();
         if (status === "granted") {
           console.log("✅ Permission granted");
-          loadmediaFileFromDevice(); // Call after permission is granted
+          loadmediaFileFromDevice();
         } else {
           console.log("❌ Permission still not granted");
         }
       } else {
         console.log("✅ Already have permission");
-        loadmediaFileFromDevice(); // Load if already granted
+        loadmediaFileFromDevice();
       }
     })();
   }, [permissionResponse]);
 
   useEffect(() => {
     (async () => {
-      await initializeDB(); // Ensure DB is set up
+      await initializeDB();
       check_db_for_media_files();
-      const dataArray: any[] = await getMediaFiles(); // Fetch data
+      const dataArray: DatabaseItem[] = await getMediaFiles();
       setmediaDataFromDatabase(dataArray);
     })();
   }, [mediaFileFromDevice]);
@@ -106,13 +107,11 @@ export default function MediaListScreen() {
   async function check_db_for_media_files() {
     console.log("📂 Checking for media files...");
 
-    // Iterate over the media files and check if each file exists in the database
     for (let i = 0; i < mediaFileFromDevice.length; i++) {
       const file = mediaFileFromDevice[i];
       const databaseFile = await getMediaFileByTitle(file.filename);
 
       if (databaseFile === null) {
-        // add it to the database
         await insertMediaFile(file.filename, file.uri);
       }
     }
@@ -120,41 +119,43 @@ export default function MediaListScreen() {
 
   const sync_media_files_to_db = async () => {
     console.log("📂 Syncing media files to database...");
+    setmediaDataFromDatabase((prevData) =>
+      prevData.map((item) => ({ ...item, syncing: item.is_synced === 0 }))
+    );
 
     const databaseContent: DatabaseItem[] = await getMediaFiles();
+
     for (let i = 0; i < databaseContent.length; i++) {
-      const databaseFile: DatabaseItem = databaseContent[i];
+      const databaseFile = databaseContent[i];
 
       if (databaseFile.is_synced === 0) {
-        // Only sync if is_synced is 0
         try {
-          const response = await fetch("http://localhost:3000/submit", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              filename: databaseFile.filename,
-              uri: databaseFile.uri,
-            }),
-          });
+          const uploadUrl = "http://10.0.2.2:3000/submit";
+          const result = await FileSystem.uploadAsync(
+            uploadUrl,
+            databaseFile.uri,
+            {
+              httpMethod: "POST",
+              uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+              fieldName: "photo",
+              parameters: { filename: databaseFile.filename },
+            }
+          );
 
-          console.log("response:", response);
-
-          if (response.ok) {
+          if (result.status === 200 || result.status === 409) {
             console.log(
               `✅ File ${databaseFile.filename} synced successfully.`
             );
-            await updateMediaFile(databaseFile.id, 1); // Mark as synced
-          } else if (response.status === 400) {
-            console.log(
-              `⚠️ File ${databaseFile.filename} already exists on the server.`
+            await updateMediaFile(databaseFile.id, 1);
+
+            // Update only the synced file in state
+            setmediaDataFromDatabase((prevData) =>
+              prevData.map((item) =>
+                item.id === databaseFile.id ? { ...item, is_synced: 1 } : item
+              )
             );
-            await updateMediaFile(databaseFile.id, 1); // Mark as synced
           } else {
-            console.error(
-              `❌ Error syncing file ${databaseFile.filename}. Status: ${response.status}`
-            );
+            console.error(`❌ Error syncing file ${databaseFile.filename}.`);
           }
         } catch (error) {
           console.error(
@@ -166,10 +167,22 @@ export default function MediaListScreen() {
     }
   };
 
+  const reset_media_files_to_db = async () => {
+    console.log("📂 Resetting media files to database...");
+    const databaseContent: DatabaseItem[] = await getMediaFiles();
+    for (let i = 0; i < databaseContent.length; i++) {
+      await updateMediaFile(databaseContent[i].id, 0);
+    }
+    console.log("📂 Media files reset to unsynched state");
+    setmediaDataFromDatabase(await getMediaFiles());
+  };
+
   return (
     <View style={styles.container}>
       <Button title="Reload Media" onPress={loadmediaFileFromDevice} />
       <Button title="Sync Media" onPress={sync_media_files_to_db} />
+      <Button title="Reset Database" onPress={reset_media_files_to_db} />
+
       <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 20 }}>
         <Text style={{ color: "black", fontSize: 18 }}>SQLite Test Data</Text>
         {mediaDataFromDatabase.length > 0 ? (
@@ -191,11 +204,17 @@ export default function MediaListScreen() {
             >
               <Text style={styles.fileText}>{item.filename}</Text>
               {item.is_synced == 0 ? (
-                // Show a synced icon
-                <IconSymbol name="sync" size={20} color="red" />
+                <IconSymbol
+                  name={"sync" as IconSymbolName}
+                  size={20}
+                  color="red"
+                />
               ) : (
-                // Show an unsynced icon
-                <IconSymbol name="sync" size={20} color="green" />
+                <IconSymbol
+                  name={"sync" as IconSymbolName}
+                  size={20}
+                  color="green"
+                />
               )}
             </View>
           ))

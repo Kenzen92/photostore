@@ -50,7 +50,6 @@ export const getMediaFileByTitle = async (filename: string) => {
 
 export const getMediaFiles = async () => {
   const db = await SQLite.openDatabaseAsync("photostore.db");
-  console.log(db);
   try {
     const dataArray = await db.getAllAsync(`SELECT * FROM media_files`);
     return dataArray as DatabaseItem[];
@@ -62,6 +61,9 @@ export const getMediaFiles = async () => {
 
 export const updateMediaFile = async (id: number, isSynced: number) => {
   const db = await SQLite.openDatabaseAsync("photostore.db");
+  console.log(
+    `UPDATE media_files SET is_synced = ${isSynced} WHERE id = ${id}`
+  );
   try {
     await db.execAsync(
       `UPDATE media_files SET is_synced = ${isSynced} WHERE id = ${id}`
