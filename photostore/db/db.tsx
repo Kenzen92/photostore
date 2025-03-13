@@ -25,7 +25,7 @@ export const insertMediaFile = async (filename: string, uri: string) => {
   const db = await SQLite.openDatabaseAsync("photostore.db");
   try {
     await db.runAsync(
-      `INSERT INTO media_files (filename, uri) VALUES (?, ?)`,
+      `INSERT INTO media_files (filename, uri, ) VALUES (?, ?)`,
       [filename, uri] // Use parameterized query
     );
     return true;
@@ -95,5 +95,16 @@ export const getTestData = async () => {
   } catch (error) {
     console.error("❌ Query error:", error);
     return [];
+  }
+};
+
+export const clearDatabase = async () => {
+  const db = await SQLite.openDatabaseAsync("photostore.db");
+  try {
+    db.execAsync(`DELETE FROM media_files`);
+    return true;
+  } catch (error) {
+    console.error("❌ Error clearing database:", error);
+    return false;
   }
 };

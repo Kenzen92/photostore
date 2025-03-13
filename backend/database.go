@@ -10,7 +10,7 @@ import (
 )
 
 // Photo model
-type Photo struct {
+type MediaFile struct {
 	gorm.Model
 	Filename string `gorm:"uniqueIndex"` // Add unique index
 	Path     string
@@ -36,7 +36,7 @@ func InitDB() *gorm.DB {
 	}
 
 	// Auto-migrate the schema
-	db.AutoMigrate(&Photo{})
+	db.AutoMigrate(&MediaFile{})
 
 	return db
 }

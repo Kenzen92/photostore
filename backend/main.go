@@ -21,7 +21,7 @@ func main() {
 
 	// Initialize the database
 	db = InitDB()
-	db.AutoMigrate(&Photo{}) // Auto migrate Photo model
+	db.AutoMigrate(&MediaFile{}) // Auto migrate MediaFile model
 
 	// Get upload directory from .env
 	uploadDir := os.Getenv("UPLOAD_DIR")
@@ -62,7 +62,7 @@ func main() {
 		filePath := fmt.Sprintf("%s/%s", uploadDir, file.Filename)
 
 		// Check if file already exists in the database
-		var existingPhoto Photo
+		var existingPhoto MediaFile
 		result := db.Where("filename = ?", file.Filename).First(&existingPhoto)
 		if result.Error == nil {
 			// File already exists
@@ -80,12 +80,15 @@ func main() {
 				"error": "Failed to save file",
 			})
 		}
-
+		if err != nil {
+			log.Println("Error", err)
+		}
 		// Save file info to database
-		photo := Photo{
+		photo := MediaFile{
 			Filename: file.Filename,
 			Path:     filePath,
 		}
+
 		db.Create(&photo)
 
 		// Return success response
@@ -93,6 +96,32 @@ func main() {
 			"message": "Photo submitted successfully",
 			"file":    file.Filename,
 			"path":    filePath,
+			"status":  200,
+		})
+	})
+
+	app.Get("/check", func(c *fiber.Ctx) error {
+		// Function that takes a photo checksum as a param and returns a boolean
+		// determined by whether the photo exists in the database
+		filename := c.Query("filename")
+		if filename == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "No filename provided",
+			})
+		}
+
+		var photo MediaFile
+		result := db.Where("Filename = ?", filename).First(&photo)
+		if result.Error != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error":  "Photo not found",
+				"status": 404,
+			})
+		}
+
+		return c.JSON(fiber.Map{
+			"message": "Photo found",
+			"path":    photo.Path,
 			"status":  200,
 		})
 	})
